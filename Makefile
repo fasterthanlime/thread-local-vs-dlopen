@@ -23,3 +23,12 @@ run: build
 run-preload: build
 	LD_PRELOAD=./libhide-thread-atexit.so ./runner/target/debug/runner ./libcheer/target/debug/libcheer.so
 
+valgrind: build
+	valgrind --leak-check=full -- ./runner/target/debug/runner ./libcheer/target/debug/libcheer.so
+
+valgrind-preload: build
+	valgrind --trace-children=yes --leak-check=full -- env LD_PRELOAD=./libhide-thread-atexit.so ./runner/target/debug/runner ./libcheer/target/debug/libcheer.so
+
+valgrind-preload2: build
+	LD_PRELOAD=./libhide-thread-atexit.so valgrind --leak-check=full -- ./runner/target/debug/runner ./libcheer/target/debug/libcheer.so
+

@@ -27,29 +27,33 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert!(is_lib_loaded(), "lib should be loaded by now");
 
     let sym_name = "cheer";
-    log(format!("looking up symbol {:?}", sym_name));
     let sym_name = CString::new(sym_name)?;
     let cheer = unsafe { libc::dlsym(handle.0, sym_name.as_ptr()) };
     assert!(!cheer.is_null(), "lib should contain 'cheer' symbol");
 
     let cheer: unsafe extern "C" fn() = unsafe { std::mem::transmute(cheer) };
-    log("calling cheer");
 
     std::thread::spawn(move || {
-        use_sentinel();
+        use_sentinel("runner");
 
+        log("thread: starting");
         unsafe {
             cheer();
         }
-
-        log("closing library");
         unsafe {
-            libc::dlclose(handle.0);
+            cheer();
         }
-        assert!(!is_lib_loaded(), "lib should have unloaded by now");
+        log("thread: exiting");
     })
     .join()
     .unwrap();
+
+    log("library: closing");
+    unsafe {
+        libc::dlclose(handle.0);
+    }
+
+    assert!(!is_lib_loaded(), "lib should have unloaded by now");
 
     Ok(())
 }

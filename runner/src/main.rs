@@ -1,5 +1,5 @@
 use sentinel::{log, use_sentinel};
-use std::{error::Error, ffi::CString};
+use std::{error::Error, ffi::CStr, ffi::CString};
 
 use libc::c_void;
 
@@ -8,16 +8,52 @@ struct Handle(*mut c_void);
 unsafe impl Send for Handle {}
 unsafe impl Sync for Handle {}
 
+// #[no_mangle]
+// #[allow(clippy::no_safety_doc)]
+// pub fn __cxa_thread_atexit_impl() {
+//     sentinel::log("eschewing __cxa_thread_atexit_impl");
+// }
+
 fn main() -> Result<(), Box<dyn Error>> {
     let lib_name = std::env::args()
         .nth(1)
         .expect("Usage: run path/to/libcheer.so");
-    log(format!("loading library {:?}", lib_name));
     let lib_name = CString::new(lib_name)?;
 
+    for _ in 0..2 {
+        let lib_name = lib_name.clone();
+        std::thread::spawn(move || {
+            round(&lib_name).unwrap();
+        })
+        .join()
+        .unwrap();
+    }
+
+    Ok(())
+}
+
+fn round(lib_name: &CStr) -> Result<(), Box<dyn Error>> {
     assert!(!is_lib_loaded(), "lib should not be loaded yet");
 
-    let handle = unsafe { libc::dlopen(lib_name.as_ptr(), libc::RTLD_NOW) };
+    log("loading noop library");
+    let noop_name = CString::new("./libnoop/target/debug/libnoop.so").unwrap();
+    let mut lmid: libc::Lmid_t = 0;
+    let noop_handle =
+        unsafe { libc::dlmopen(libc::LM_ID_NEWLM, noop_name.as_ptr(), libc::RTLD_NOW) };
+    assert!(!noop_handle.is_null());
+
+    unsafe {
+        libc::dlinfo(
+            noop_handle,
+            libc::RTLD_DI_LMID,
+            &mut lmid as *mut i64 as *mut c_void,
+        )
+    };
+    log(format!("lmid = {:x}", lmid));
+
+    // let handle = unsafe { libc::dlopen(lib_name.as_ptr(), libc::RTLD_NOW) };
+    log("loading cheer library");
+    let handle = unsafe { libc::dlmopen(lmid, lib_name.as_ptr(), libc::RTLD_NOW) };
     let handle = Handle(handle);
 
     assert!(
@@ -33,20 +69,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let cheer: unsafe extern "C" fn() = unsafe { std::mem::transmute(cheer) };
 
-    std::thread::spawn(move || {
-        use_sentinel("runner");
+    // std::thread::spawn(move || {
+    use_sentinel("runner");
 
-        log("thread: starting");
-        unsafe {
-            cheer();
-        }
-        unsafe {
-            cheer();
-        }
-        log("thread: exiting");
-    })
-    .join()
-    .unwrap();
+    log("thread: starting");
+    unsafe {
+        cheer();
+    }
+    unsafe {
+        cheer();
+    }
+    log("thread: exiting");
+    // })
+    // .join()
+    // .unwrap();
 
     log("library: closing");
     unsafe {

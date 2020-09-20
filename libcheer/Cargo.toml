@@ -1,0 +1,11 @@
+[package]
+name = "cheer"
+version = "0.1.0"
+authors = ["Amos Wenger <amoswenger@gmail.com>"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+sentinel = { path = "../sentinel" }
